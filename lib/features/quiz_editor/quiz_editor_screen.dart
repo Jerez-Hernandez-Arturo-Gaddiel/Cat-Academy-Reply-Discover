@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:go_router/go_router.dart';
-import 'package:uuid/uuid.dart';
+import '../../providers/quiz_editor_provider.dart';
 import '../../providers/library_provider.dart';
 import '../../models/quiz.dart';
-import '../../models/question.dart';
 
 class QuizEditorScreen extends StatefulWidget {
   final String? quizId;
@@ -16,62 +15,49 @@ class QuizEditorScreen extends StatefulWidget {
 }
 
 class _QuizEditorScreenState extends State<QuizEditorScreen> {
-  final _uuid = const Uuid();
   late TextEditingController _titleController;
-  final List<TextEditingController> _questionControllers = [
-    TextEditingController(), 
-    TextEditingController(), 
-    TextEditingController(), 
-    TextEditingController(), 
-    TextEditingController(), 
-  ];
-  int _correctAnswerIndex = 0;
 
   @override
   void initState() {
     super.initState();
     _titleController = TextEditingController();
+    
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final libraryProvider = context.read<LibraryProvider>();
+      final editorProvider = context.read<QuizEditorProvider>();
+      
+      Quiz? existingQuiz;
+      if (widget.quizId != null) {
+        existingQuiz = libraryProvider.getQuizById(widget.quizId!);
+      }
+      
+      editorProvider.initialize(existingQuiz);
+      _titleController.text = editorProvider.title;
+    });
   }
 
   @override
   void dispose() {
     _titleController.dispose();
-    for (var controller in _questionControllers) {
-      controller.dispose();
-    }
     super.dispose();
   }
 
   void _onSave() {
-    final title = _titleController.text.trim();
-    final questionText = _questionControllers[0].text.trim();
-    final options = _questionControllers.skip(1).map((c) => c.text.trim()).toList();
+    final editor = context.read<QuizEditorProvider>();
+    editor.setTitle(_titleController.text);
 
-    if (title.isEmpty || questionText.isEmpty || options.any((o) => o.isEmpty)) {
+    if (!editor.isValid) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('¡Miau! Por favor rellena todos los campos.'),
+          content: Text('¡Miau! Completa el título y todas las preguntas.'),
           backgroundColor: Colors.redAccent,
         ),
       );
       return;
     }
 
-    final newQuestion = Question(
-      id: _uuid.v4(),
-      statement: questionText,
-      options: options,
-      correctAnswerIndex: _correctAnswerIndex,
-    );
-
-    final newQuiz = Quiz(
-      id: _uuid.v4(),
-      title: title,
-      createdAt: DateTime.now(),
-      questions: [newQuestion],
-    );
-
-    context.read<LibraryProvider>().saveQuiz(newQuiz).then((_) {
+    final finalQuiz = editor.getFinalQuiz();
+    context.read<LibraryProvider>().saveQuiz(finalQuiz).then((_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('¡Cuestionario guardado con éxito!')),
@@ -83,6 +69,8 @@ class _QuizEditorScreenState extends State<QuizEditorScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final editor = context.watch<QuizEditorProvider>();
+
     return Scaffold(
       body: Container(
         width: double.infinity,
@@ -94,84 +82,82 @@ class _QuizEditorScreenState extends State<QuizEditorScreen> {
           ),
         ),
         child: SafeArea(
-          child: Center(
-            child: SingleChildScrollView(
-              child: Container(
-                margin: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
-                padding: const EdgeInsets.all(25),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFFE4B5), 
-                  borderRadius: BorderRadius.circular(30),
-                  border: Border.all(color: const Color(0xFFFFB24A), width: 3),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    const Center(
-                      child: Text(
-                        'Nuevo Cuestionario',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.brown,
-                        ),
-                      ),
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.brown),
+                      onPressed: () => context.pop(),
                     ),
-                    const SizedBox(height: 25),
-                    
-                    _buildSectionTitle('Título del Quiz'),
-                    _buildOrangeTextField(_titleController, 'Ej: Razas de michis'),
-                    
-                    const SizedBox(height: 20),
-                    _buildSectionTitle('Agrega una pregunta'),
-                    _buildOrangeTextField(_questionControllers[0], '¿Qué quieres preguntar?'),
-                    
-                    const SizedBox(height: 20),
-                    _buildSectionTitle('Respuestas'),
-                    ...List.generate(4, (index) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          children: [
-                            Radio<int>(
-                              value: index,
-                              groupValue: _correctAnswerIndex,
-                              activeColor: Colors.brown,
-                              onChanged: (val) {
-                                setState(() => _correctAnswerIndex = val!);
-                              },
-                            ),
-                            Expanded(
-                              child: _buildOrangeTextField(
-                                _questionControllers[index + 1], 
-                                'Opción ${String.fromCharCode(65 + index)}'
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                    
-                    const SizedBox(height: 30),
-                    
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                      children: [
-                        GestureDetector(
-                          onTap: () => context.pop(),
-                          child: Image.asset('assets/images/Btn_Cancelar.png', width: 120),
-                        ),
-                        GestureDetector(
-                          onTap: _onSave,
-                          child: Image.asset('assets/images/Btn_Guardar.png', width: 120),
-                        ),
-                      ],
+                    Text(
+                      widget.quizId == null ? 'Nuevo Michigan' : 'Editar Michigan',
+                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.brown),
                     ),
+                    const SizedBox(width: 48),
                   ],
                 ),
               ),
-            ),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFE4B5),
+                      borderRadius: BorderRadius.circular(30),
+                      border: Border.all(color: const Color(0xFFFFB24A), width: 3),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildSectionTitle('Título del Quiz'),
+                        _buildOrangeTextField(_titleController, 'Ej: Razas de michis', (val) => editor.setTitle(val)),
+                        
+                        const SizedBox(height: 20),
+                        const Divider(color: Colors.brown),
+                        
+                        ...List.generate(editor.questions.length, (index) {
+                          return _QuestionFormBlock(index: index);
+                        }),
+                        
+                        const SizedBox(height: 20),
+                        Center(
+                          child: ElevatedButton.icon(
+                            onPressed: () => editor.addQuestion(),
+                            icon: const Icon(Icons.add),
+                            label: const Text('Añadir otra pregunta'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.brown,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                            ),
+                          ),
+                        ),
+                        
+                        const SizedBox(height: 30),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                          children: [
+                            GestureDetector(
+                              onTap: () => context.pop(),
+                              child: Image.asset('assets/images/Btn_Cancelar.png', width: 120),
+                            ),
+                            GestureDetector(
+                              onTap: _onSave,
+                              child: Image.asset('assets/images/Btn_Guardar.png', width: 120),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -181,30 +167,97 @@ class _QuizEditorScreenState extends State<QuizEditorScreen> {
   Widget _buildSectionTitle(String title) {
     return Padding(
       padding: const EdgeInsets.only(left: 8, bottom: 8),
-      child: Text(
-        title,
-        style: const TextStyle(
-          fontSize: 16,
-          fontWeight: FontWeight.bold,
-          color: Colors.brown,
+      child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.brown)),
+    );
+  }
+
+  Widget _buildOrangeTextField(TextEditingController controller, String hint, Function(String)? onChanged) {
+    return Container(
+      decoration: BoxDecoration(color: const Color(0xFFFFB24A), borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.symmetric(horizontal: 15),
+      child: TextField(
+        controller: controller,
+        onChanged: onChanged,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+        decoration: InputDecoration(
+          hintText: hint,
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+          border: InputBorder.none,
         ),
       ),
     );
   }
+}
 
-  Widget _buildOrangeTextField(TextEditingController controller, String hint) {
+class _QuestionFormBlock extends StatelessWidget {
+  final int index;
+
+  const _QuestionFormBlock({required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final editor = context.watch<QuizEditorProvider>();
+    final question = editor.questions[index];
+    
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const SizedBox(height: 20),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Pregunta ${index + 1}', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.brown)),
+            if (editor.questions.length > 1)
+              IconButton(
+                icon: const Icon(Icons.delete_outline, color: Colors.red),
+                onPressed: () => editor.removeQuestion(index),
+              ),
+          ],
+        ),
+        _buildOrangeField(
+          initialValue: question.statement,
+          hint: '¿Qué quieres preguntar?',
+          onChanged: (val) => editor.updateQuestionStatement(index, val),
+        ),
+        const SizedBox(height: 10),
+        const Text('Opciones (Selecciona la correcta)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: Colors.brown)),
+        ...List.generate(4, (optIndex) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Row(
+              children: [
+                Radio<int>(
+                  value: optIndex,
+                  groupValue: question.correctAnswerIndex,
+                  activeColor: Colors.brown,
+                  onChanged: (val) => editor.setCorrectAnswer(index, val!),
+                ),
+                Expanded(
+                  child: _buildOrangeField(
+                    initialValue: question.options[optIndex],
+                    hint: 'Opción ${String.fromCharCode(65 + optIndex)}',
+                    onChanged: (val) => editor.updateOption(index, optIndex, val),
+                  ),
+                ),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _buildOrangeField({required String initialValue, required String hint, required Function(String) onChanged}) {
     return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFFFB24A),
-        borderRadius: BorderRadius.circular(15),
-      ),
+      decoration: BoxDecoration(color: const Color(0xFFFFB24A), borderRadius: BorderRadius.circular(15)),
       padding: const EdgeInsets.symmetric(horizontal: 15),
-      child: TextField(
-        controller: controller,
+      child: TextFormField(
+        initialValue: initialValue,
+        onChanged: onChanged,
         style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
         decoration: InputDecoration(
           hintText: hint,
-          hintStyle: TextStyle(color: Colors.white.withOpacity(0.7)),
+          hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
           border: InputBorder.none,
         ),
       ),

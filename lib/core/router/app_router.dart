@@ -68,6 +68,19 @@ class AppRouter {
           ),
         ),
         GoRoute(
+          path: '/editor/:id',
+          pageBuilder: (context, state) {
+            final id = state.pathParameters['id'];
+            return CustomTransitionPage(
+              key: state.pageKey,
+              child: QuizEditorScreen(quizId: id),
+              transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+                  FadeTransition(opacity: animation, child: child),
+              transitionDuration: const Duration(milliseconds: 300),
+            );
+          },
+        ),
+        GoRoute(
           path: '/runner',
           pageBuilder: (context, state) {
             final config = state.extra as QuizSessionConfig;

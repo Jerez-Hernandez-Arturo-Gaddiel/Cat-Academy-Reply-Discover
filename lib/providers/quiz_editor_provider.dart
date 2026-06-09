@@ -64,10 +64,12 @@ class QuizEditorProvider extends ChangeNotifier {
 
   void updateQuestionStatement(int index, String statement) {
     _questions[index].statement = statement;
+    notifyListeners();
   }
 
   void updateOption(int questionIndex, int optionIndex, String text) {
     _questions[questionIndex].options[optionIndex] = text;
+    notifyListeners();
   }
 
   void setCorrectAnswer(int questionIndex, int optionIndex) {

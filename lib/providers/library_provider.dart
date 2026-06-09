@@ -51,6 +51,34 @@ class LibraryProvider extends ChangeNotifier {
     _quizzes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
   }
 
+  Future<void> addQuiz(Quiz quiz) async {
+    final box = Hive.box<Quiz>(_boxName);
+    await box.put(quiz.id, quiz);
+    _loadData(box);
+    notifyListeners();
+  }
+
+  Future<void> editQuiz(Quiz quiz) async {
+    final box = Hive.box<Quiz>(_boxName);
+    await box.put(quiz.id, quiz);
+    _loadData(box);
+    notifyListeners();
+  }
+
+  Future<void> saveQuiz(Quiz quiz) async {
+    final box = Hive.box<Quiz>(_boxName);
+    await box.put(quiz.id, quiz);
+    _loadData(box);
+    notifyListeners();
+  }
+
+  Future<void> deleteQuiz(String id) async {
+    final box = Hive.box<Quiz>(_boxName);
+    await box.delete(id);
+    _loadData(box);
+    notifyListeners();
+  }
+
   Future<void> resetAndSeed() async {
     _isLoading = true;
     notifyListeners();
@@ -122,20 +150,6 @@ class LibraryProvider extends ChangeNotifier {
     for (var quiz in predefined) {
       await box.put(quiz.id, quiz);
     }
-  }
-
-  Future<void> saveQuiz(Quiz quiz) async {
-    final box = Hive.box<Quiz>(_boxName);
-    await box.put(quiz.id, quiz);
-    _loadData(box);
-    notifyListeners();
-  }
-
-  Future<void> deleteQuiz(String id) async {
-    final box = Hive.box<Quiz>(_boxName);
-    await box.delete(id);
-    _loadData(box);
-    notifyListeners();
   }
 
   Quiz? getQuizById(String id) {
